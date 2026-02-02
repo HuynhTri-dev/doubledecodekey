@@ -9,6 +9,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
+import androidx.lifecycle.ViewModelProvider
 
 class MainActivity : AppCompatActivity() {
     
@@ -16,7 +17,7 @@ class MainActivity : AppCompatActivity() {
     private val encodedInput = "QmFzZTY0VVJMLWRlY29kZSAiZVhodlptUngiIHRvIGdldCBjaXBoZXJUZXh0OyB0aGVuIENhZXNhci1kZWNvZGUgKHNoaWZ0PTMpIHRvIGdldCBLRVk"
     
     // Views
-    private lateinit var tvInput: TextView
+    private lateinit var etInput: android.widget.EditText
     private lateinit var tvInstruction: TextView
     private lateinit var tvCipherText: TextView
     private lateinit var tvFinalKey: TextView
@@ -27,9 +28,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var layoutCipher: LinearLayout
     private lateinit var layoutFinal: LinearLayout
     
-    // Logic state
-    private var currentStep = 0
-    private var decodeResult: DecodeResult? = null
+    // ViewModel
+    private lateinit var viewModel: MainViewModel
     
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -43,11 +43,12 @@ class MainActivity : AppCompatActivity() {
         }
         
         initViews()
+        initViewModel()
         setupLogic()
     }
     
     private fun initViews() {
-        tvInput = findViewById(R.id.tvInput)
+        etInput = findViewById(R.id.etInput)
         tvInstruction = findViewById(R.id.tvInstruction)
         tvCipherText = findViewById(R.id.tvCipherText)
         tvFinalKey = findViewById(R.id.tvFinalKey)
@@ -58,60 +59,96 @@ class MainActivity : AppCompatActivity() {
         layoutCipher = findViewById(R.id.layoutCipher)
         layoutFinal = findViewById(R.id.layoutFinal)
         
-        // Init Input
-        tvInput.text = encodedInput
+        // Init Input if empty
+        if (etInput.text.isEmpty()) {
+            etInput.setText(encodedInput)
+        }
+    }
+
+    private fun initViewModel() {
+        viewModel = ViewModelProvider(this)[MainViewModel::class.java]
     }
     
     private fun setupLogic() {
-        // Pre-calculate result
-        decodeResult = DecodeUtils.performDoubleDecodeProcess(encodedInput)
-        
+        // Observe State
+        viewModel.currentStep.observe(this) { step ->
+            updateUI(step)
+        }
+
         btnNextStep.setOnClickListener {
-            handleNextStep()
+            handleNextAction()
         }
     }
     
-    private fun handleNextStep() {
-        val result = decodeResult ?: return
+    private fun handleNextAction() {
+        val currentStep = viewModel.currentStep.value ?: 0
+        if (currentStep == 0) {
+            val input = etInput.text.toString().trim()
+            if (input.isEmpty()) {
+                etInput.error = "Please enter code"
+                return
+            }
+            viewModel.startDecoding(input)
+        } else {
+            viewModel.nextStep()
+        }
+    }
+    
+    private fun updateUI(step: Int) {
+        val result = viewModel.decodeResult.value
         
-        currentStep++
+        // Always clear error first
+        tvError.visibility = View.GONE
         
-        when (currentStep) {
-            1 -> {
-                // Show Instruction
-                layoutInstruction.visibility = View.VISIBLE
-                if (result.instruction != null) {
-                    tvInstruction.text = result.instruction
-                    btnNextStep.text = "Next: Decode Cipher"
-                } else {
-                    showError(result.error ?: "Failed to decode instruction")
-                }
-            }
-            2 -> {
-                // Show Cipher Text
-                if (result.cipherText != null) {
-                    layoutCipher.visibility = View.VISIBLE
-                    tvCipherText.text = result.cipherText
-                    btnNextStep.text = "Next: Final Key"
-                } else {
-                    showError(result.error ?: "Failed to get cipher text")
-                }
-            }
-            3 -> {
-                // Show Final Key
-                if (result.finalKey != null) {
-                    layoutFinal.visibility = View.VISIBLE
-                    tvFinalKey.text = result.finalKey
-                    btnNextStep.text = "Reset"
-                    // Change button style or text to indicate done
-                } else {
-                    showError(result.error ?: "Failed to get final key")
-                }
-            }
-            4 -> {
-                // Reset
-                resetProcess()
-            }
+        // Update visibility based on step
+        if (step == 0) {
+            layoutInstruction.visibility = View.GONE
+            layoutCipher.visibility = View.GONE
+            layoutFinal.visibility = View.GONE
+            btnNextStep.text = "Start Decoding"
+            return
+        }
+        
+        // Because steps accumulate (1 shows instruction, 2 shows instr+cipher, etc.)
+        // We can just check >= checks or use the when block to set everything.
+        
+        // Step 1+: Instruction
+        if (step >= 1) {
+             layoutInstruction.visibility = View.VISIBLE
+             if (result?.instruction != null) {
+                 tvInstruction.text = result.instruction
+             } else {
+                 if (step == 1) showError(result?.error ?: "Failed to decode instruction")
+             }
+        }
+        
+        // Step 2+: Cipher
+        if (step >= 2) {
+             if (result?.cipherText != null) {
+                 layoutCipher.visibility = View.VISIBLE
+                 tvCipherText.text = result.cipherText
+             } else {
+                 if (step == 2) showError(result?.error ?: "Failed to get cipher text")
+             }
+        }
+        
+        // Step 3: Final Key
+        if (step >= 3) {
+             if (result?.finalKey != null) {
+                 layoutFinal.visibility = View.VISIBLE
+                 tvFinalKey.text = result.finalKey
+                 btnNextStep.text = "Reset"
+             } else {
+                 showError(result?.error ?: "Failed to get final key")
+                 return // showError handles button text
+             }
+        }
+        
+        // Button Text Updates (if not error)
+        when (step) {
+            1 -> btnNextStep.text = "Next: Decode Cipher"
+            2 -> btnNextStep.text = "Next: Final Key"
+            3 -> btnNextStep.text = "Reset"
         }
     }
     
@@ -119,15 +156,9 @@ class MainActivity : AppCompatActivity() {
         tvError.visibility = View.VISIBLE
         tvError.text = "Error: $message"
         btnNextStep.text = "Reset"
-        currentStep = 3 // Jump to end state effectively
-    }
-    
-    private fun resetProcess() {
-        currentStep = 0
-        layoutInstruction.visibility = View.GONE
-        layoutCipher.visibility = View.GONE
-        layoutFinal.visibility = View.GONE
-        tvError.visibility = View.GONE
-        btnNextStep.text = "Start Decoding"
+        // Ensure state is 3 so next click resets
+        if (viewModel.currentStep.value != 3) {
+            viewModel.jumpToErrorState()
+        }
     }
 }

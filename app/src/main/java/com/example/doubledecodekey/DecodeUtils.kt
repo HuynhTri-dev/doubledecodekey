@@ -1,9 +1,11 @@
 package com.example.doubledecodekey
 
 import android.util.Base64
+import android.util.Log
 import java.nio.charset.StandardCharsets
 
 object DecodeUtils {
+    private const val TAG = "DecodeUtils"
 
     /**
      * Giải mã Base64URL (không có padding)
@@ -11,23 +13,27 @@ object DecodeUtils {
      * @return Chuỗi đã được giải mã hoặc null nếu lỗi
      */
     fun decodeBase64Url(input: String): Result<String> {
+        Log.d(TAG, "decodeBase64Url: input = $input")
         return try {
             // Thêm padding
-            val paddedInput = when (input.length % 4) {
-                2 -> "$input=="
-                3 -> "$input="
-                else -> input
-            }
+            // val paddedInput = when (input.length % 4) {
+            //     2 -> "$input=="
+            //     3 -> "$input="
+            //     else -> input
+            // }
             
             // Chuyển đổi Base64URL sang Base64 chuẩn
-            val base64Standard = paddedInput
+            val base64Standard = input
                 .replace('-', '+')
                 .replace('_', '/')
             
             // Decode Base64
             val decodedBytes = Base64.decode(base64Standard, Base64.DEFAULT)
-            Result.success(String(decodedBytes, StandardCharsets.UTF_8))
+            val result = String(decodedBytes, StandardCharsets.UTF_8)
+            Log.d(TAG, "decodeBase64Url: result = $result")
+            Result.success(result)
         } catch (e: Exception) {
+            Log.e(TAG, "decodeBase64Url: Error = ${e.message}")
             Result.failure(Exception("Invalid Base64URL: ${e.message}"))
         }
     }
@@ -39,6 +45,7 @@ object DecodeUtils {
      * @return Chuỗi plaintext đã được giải mã
      */
     fun caesarDecode(input: String, shift: Int = 3): Result<String> {
+        Log.d(TAG, "caesarDecode: input = $input, shift = $shift")
         return try {
             val result = StringBuilder()
             
@@ -62,8 +69,10 @@ object DecodeUtils {
                 result.append(decodedChar)
             }
             
+            Log.d(TAG, "caesarDecode: result = $result")
             Result.success(result.toString())
         } catch (e: Exception) {
+            Log.e(TAG, "caesarDecode: Error = ${e.message}")
             Result.failure(Exception("Caesar Decode Error: ${e.message}"))
         }
     }
@@ -75,6 +84,7 @@ object DecodeUtils {
      * @return Pair<cipherText, shift> hoặc null nếu không parse được
      */
     fun parseInstruction(instruction: String): Result<Pair<String, Int>> {
+        Log.d(TAG, "parseInstruction: instruction = $instruction")
         return try {
             // Regex để trích xuất chuỗi trong dấu ngoặc kép và giá trị shift
             val encodedTextRegex = "\"([^\"]+)\"".toRegex()
@@ -96,6 +106,7 @@ object DecodeUtils {
             
             Result.success(Pair(encodedText, shift))
         } catch (e: Exception) {
+            Log.e(TAG, "parseInstruction: Error = ${e.message}")
             Result.failure(Exception("Parse Instruction Error: ${e.message}"))
         }
     }
@@ -106,6 +117,7 @@ object DecodeUtils {
      * @return DecodeResult chứa kết quả trung gian và KEY cuối cùng
      */
     fun performDoubleDecodeProcess(input: String): DecodeResult {
+        Log.d(TAG, "performDoubleDecodeProcess: START with input = $input")
         // Decode Base64URL để lấy Instruction
         val instructionResult = decodeBase64Url(input.trim())
         if (instructionResult.isFailure) {
@@ -150,6 +162,7 @@ object DecodeUtils {
         }
         val finalKey = keyResult.getOrThrow()
         
+        Log.d(TAG, "performDoubleDecodeProcess: SUCCESS with finalKey = $finalKey")
         return DecodeResult(
             success = true,
             instruction = instruction,
