@@ -12,7 +12,7 @@ object DecodeUtils {
      */
     fun decodeBase64Url(input: String): Result<String> {
         return try {
-            // Thêm padding nếu cần thiết
+            // Thêm padding
             val paddedInput = when (input.length % 4) {
                 2 -> "$input=="
                 3 -> "$input="
@@ -106,7 +106,7 @@ object DecodeUtils {
      * @return DecodeResult chứa kết quả trung gian và KEY cuối cùng
      */
     fun performDoubleDecodeProcess(input: String): DecodeResult {
-        // Bước 1: Decode Base64URL để lấy Instruction
+        // Decode Base64URL để lấy Instruction
         val instructionResult = decodeBase64Url(input.trim())
         if (instructionResult.isFailure) {
             return DecodeResult(
@@ -116,7 +116,7 @@ object DecodeUtils {
         }
         val instruction = instructionResult.getOrThrow()
         
-        // Bước 2: Parse instruction để lấy encoded text và shift value
+        // Parse instruction để lấy encoded text và shift value
         val parseResult = parseInstruction(instruction)
         if (parseResult.isFailure) {
             return DecodeResult(
@@ -127,7 +127,7 @@ object DecodeUtils {
         }
         val (encodedCipherText, shift) = parseResult.getOrThrow()
         
-        // Bước 3: Decode Base64URL lần 2 để lấy cipherText
+        // Decode Base64URL lần 2 để lấy cipherText
         val cipherTextResult = decodeBase64Url(encodedCipherText)
         if (cipherTextResult.isFailure) {
             return DecodeResult(
@@ -138,7 +138,7 @@ object DecodeUtils {
         }
         val cipherText = cipherTextResult.getOrThrow()
         
-        // Bước 4: Caesar decode để lấy KEY cuối cùng
+        // Caesar decode để lấy KEY cuối cùng
         val keyResult = caesarDecode(cipherText, shift)
         if (keyResult.isFailure) {
             return DecodeResult(
